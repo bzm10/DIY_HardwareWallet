@@ -64,6 +64,71 @@ String base58Encode(const uint8_t *input, size_t len)
 
   return result;
 }
+// --------------------------------------------
+// Base58 Decoding Function
+// --------------------------------------------
+size_t base58Decode(const String &input, uint8_t *output, size_t outputLen)
+{
+  const char *ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  int8_t INDEXES[128];
+  memset(INDEXES, -1, sizeof(INDEXES));
+  for (int i = 0; i < 58; i++)
+  {
+    INDEXES[(uint8_t)ALPHABET[i]] = i;
+  }
+
+  // Convert the Base58 string to a big-endian integer
+  size_t zeroes = 0;
+  for (size_t i = 0; i < input.length(); i++)
+  {
+    if (input[i] >= 128 || INDEXES[(uint8_t)input[i]] == -1)
+    {
+      return 0; // Invalid character
+    }
+    if (input[i] == '1')
+    {
+      zeroes++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  size_t size = input.length() * 733 / 1000 + 1; // log(58)/log(256), rounded up
+  uint8_t buf[size];
+  memset(buf, 0, size);
+
+  for (size_t i = 0; i < input.length(); i++)
+  {
+    int carry = INDEXES[(uint8_t)input[i]];
+    for (ssize_t j = size - 1; j >= 0; j--)
+    {
+      carry += 58 * buf[j];
+      buf[j] = carry % 256;
+      carry /= 256;
+    }
+  }
+
+  // Skip leading zeroes in the buffer
+  size_t i = 0;
+  while (i < size && buf[i] == 0)
+  {
+    i++;
+  }
+
+  // Copy the result into the output buffer
+  size_t decodedLen = size - i + zeroes;
+  if (decodedLen > outputLen)
+  {
+    return 0; // Output buffer too small
+  }
+
+  memset(output, 0, outputLen);
+  memcpy(output + zeroes, buf + i, size - i);
+
+  return decodedLen; // Return the number of bytes written to the output
+}
 
 // -------------------------------------------------------------------------
 // Solana (Ed25519): Generate a 32-byte seed and its corresponding public key
@@ -324,6 +389,20 @@ String decryptData(const String &encryptedHex, const char *password)
   return out;
 }
 
+// Funcion to sign a unsigned solana transaction
+std::tuple<String, String> signSolanaTransaction(const uint8_t *unsignedTx, size_t txLen,
+                         const uint8_t *privateKey, const uint8_t *publicKey)
+{
+  // Generate a 64-byte Ed25519 signature
+  uint8_t signature[64];
+  Ed25519::sign(signature, unsignedTx, publicKey, privateKey, txLen);
+
+  // Convert signature and public key to Base58 for return
+  String signatureBase58 = base58Encode(signature, 64);
+  String publicKeyBase58 = base58Encode(publicKey, 32);
+
+  return std::make_tuple(signatureBase58, publicKeyBase58);
+}
 
 void setup()
 {
@@ -337,15 +416,27 @@ void setup()
   prefs.begin("storage", false);
   String encSolPriv = prefs.getString("SolPriv", "");
   String encEthPriv = prefs.getString("EthPriv", "");
+  String encSolPub = prefs.getString("SolPub", "");
+  String encEthPub = prefs.getString("EthPub", "");
+  String encSolCombined = prefs.getString("SolCombined", "");
+  String encEthAddr = prefs.getString("EthAddr", "");
   
   String SolPriv = encSolPriv.length() > 0 ? decryptData(encSolPriv, passcode) : "";
   String EthPriv = encEthPriv.length() > 0 ? decryptData(encEthPriv, passcode) : "";
+  String SolPub = encSolPub.length() > 0 ? decryptData(encSolPub, passcode) : "";
+  String EthPub = encEthPub.length() > 0 ? decryptData(encEthPub, passcode) : "";
+  String SolCombined = encSolCombined.length() > 0 ? decryptData(encSolCombined, passcode) : "";
+  String EthAddr = encEthAddr.length() > 0 ? decryptData(encEthAddr, passcode) : "";
 
   if (SolPriv.length() > 0 && EthPriv.length() > 0)
   {
     Serial.print("Data found in NVS already: ");
     Serial.println(SolPriv);
     Serial.println(EthPriv);
+    Serial.println(SolPub);
+    Serial.println(EthPub);
+    Serial.println(SolCombined);
+    Serial.println(EthAddr);
   }
   else
   {
@@ -377,34 +468,80 @@ void setup()
     Serial.println("Keys generated and stored in NVS");
   }
   prefs.end();
-
-  while (!Serial);
-  Serial.println("Ready to receive input...");
 }
 
 void loop()
 {
-  // Command list codes
-  String sendSol = "1";
-  String sendEth = "2";
-  String ViewSolPub = "3";
-  String ViewEthPub = "4";
+  // // Command list codes
+  // String sendSol = "1";
+  // String sendEth = "2";
+  // String ViewSolPub = "3";
+  // String ViewEthPub = "4";
 
-  // Read command from Serial
-  String command = Serial.readStringUntil('\n');
-  command.trim();
+  // // Read command from Serial
+  // String command = Serial.readStringUntil('\n');
+  // command.trim();
 
-  // Check if the command is any of the above
+  // // Check if the command is any of the above
 
-  if (command == sendSol) {
-    // Send Solana keys
-  } else if (command == sendEth) {
-    // Send Ethereum keys
-  } else if (command == ViewSolPub) {
-    // View Solana public key
-  } else if (command == ViewEthPub) {
-    // View Ethereum public key
-  } else {
-    Serial.println("Invalid command");
+  // if (command == sendSol) {
+  //   // Send Solana keys
+  // } else if (command == sendEth) {
+  //   // Send Ethereum keys
+  // } else if (command == ViewSolPub) {
+  //   // View Solana public key
+  // } else if (command == ViewEthPub) {
+  //   // View Ethereum public key
+  // } else {
+  //   Serial.println("Invalid command");
+  // }
+
+  // read serial input
+  if (Serial.available())
+  {
+    // Take the serial input and sign it with the solana private key
+    String input = Serial.readStringUntil('\n');
+    input.trim();
+
+    // Convert input from hex to bytes
+    size_t inputLen = input.length() / 2;
+    uint8_t inputBytes[inputLen];
+    hexToBytes(input, inputBytes, inputLen);
+
+    // Retrieve the Solana private key from NVS
+    prefs.begin("storage", false);
+    String encSolPriv = prefs.getString("SolPriv", "");
+    String encSolPub = prefs.getString("SolPub", "");
+    prefs.end();
+
+    if (encSolPriv.length() == 0)
+    {
+      Serial.println("No Solana private key found in NVS.");
+      return;
+    }
+
+    const char *passcode = "mySecretPassword";
+    String solPrivBase58 = decryptData(encSolPriv, passcode);
+
+    // Decode the Base58 private key back to bytes
+    uint8_t solPrivateKey[32];
+    base58Decode(solPrivBase58, solPrivateKey, 32);
+
+    // Generate the corresponding public key
+    String solPublicKey = decryptData(encSolPub, passcode);
+    uint8_t solPubKey[32];
+    base58Decode(solPublicKey, solPubKey, 32);
+
+    Serial.println("Public Key (Base58): " + solPublicKey);
+
+    // Sign the input data
+    uint8_t signature[64];
+    Ed25519::sign(signature, solPrivateKey, solPubKey, inputBytes, inputLen);
+
+    // Convert the signature to Base58
+    String signatureBase58 = base58Encode(signature, 64);
+
+    // Output the signature
+    Serial.println("Signature (Base58):" + signatureBase58);
   }
 }
