@@ -324,10 +324,12 @@ String decryptData(const String &encryptedHex, const char *password)
   return out;
 }
 
+
 void setup()
 {
   Serial.begin(115200);
-  delay(1000);
+  delay(500);
+  Serial.println("Starting...");
 
   const char *passcode = "mySecretPassword";
 
@@ -376,10 +378,33 @@ void setup()
   }
   prefs.end();
 
-
+  while (!Serial);
+  Serial.println("Ready to receive input...");
 }
 
 void loop()
 {
-  // Nothing to do here.
+  // Command list codes
+  String sendSol = "1";
+  String sendEth = "2";
+  String ViewSolPub = "3";
+  String ViewEthPub = "4";
+
+  // Read command from Serial
+  String command = Serial.readStringUntil('\n');
+  command.trim();
+
+  // Check if the command is any of the above
+
+  if (command == sendSol) {
+    // Send Solana keys
+  } else if (command == sendEth) {
+    // Send Ethereum keys
+  } else if (command == ViewSolPub) {
+    // View Solana public key
+  } else if (command == ViewEthPub) {
+    // View Ethereum public key
+  } else {
+    Serial.println("Invalid command");
+  }
 }
