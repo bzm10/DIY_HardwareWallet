@@ -5,8 +5,16 @@
 #include "keccak256.h"
 #include <tuple>
 #include <Preferences.h>
+#include <AES.h>
+#include <CBC.h>
+#include <SHA256.h>
+
 
 Preferences prefs;
+
+static const size_t SALT_LEN = 8;
+static const size_t IV_LEN = 16;  
+static const size_t KEY_LEN = 32;
 
 // --------------------------------------------
 // Base58 Encoding Function
@@ -161,18 +169,175 @@ std::tuple<String, String, String> generateEthereumKeys()
 }
 
 
+// -------------------------------------------------------------------------
+// Encrypt the private keys and store them in NVS
+// -------------------------------------------------------------------------
+String bytesToHex(const uint8_t *data, size_t length)
+{
+  String hexStr = "";
+  for (size_t i = 0; i < length; i++)
+  {
+    if (data[i] < 16)
+      hexStr += "0";
+    hexStr += String(data[i], HEX);
+  }
+  return hexStr;
+}
+
+void hexToBytes(const String &hex, uint8_t *buffer, size_t bufferLen)
+{
+  for (size_t i = 0; i < bufferLen; i++)
+  {
+    String byteString = hex.substring(i * 2, i * 2 + 2);
+    buffer[i] = (uint8_t)strtol(byteString.c_str(), NULL, 16);
+  }
+}
+
+uint8_t *pkcs7Pad(const uint8_t *input, size_t inputLen, size_t blockSize, size_t &paddedLen)
+{
+  uint8_t padVal = blockSize - (inputLen % blockSize);
+  if (padVal == 0)
+    padVal = blockSize;
+  paddedLen = inputLen + padVal;
+  uint8_t *output = (uint8_t *)malloc(paddedLen);
+  memcpy(output, input, inputLen);
+  for (size_t i = inputLen; i < paddedLen; i++)
+  {
+    output[i] = padVal;
+  }
+  return output;
+}
+
+size_t pkcs7Unpad(uint8_t *buffer, size_t totalLen, size_t blockSize)
+{
+  if (totalLen == 0 || (totalLen % blockSize) != 0)
+  {
+    return 0; // malformed data
+  }
+  uint8_t padVal = buffer[totalLen - 1];
+  if (padVal < 1 || padVal > blockSize)
+    return 0;
+  for (size_t i = totalLen - padVal; i < totalLen; i++)
+  {
+    if (buffer[i] != padVal)
+      return 0;
+  }
+  return totalLen - padVal;
+}
+
+String encryptData(const String &plaintext, const char *password)
+{
+  size_t infoLen = plaintext.length();
+  const uint8_t *plainData = (const uint8_t *)plaintext.c_str();
+
+  // Generate random salt and IV
+  uint8_t salt[SALT_LEN], iv[IV_LEN];
+  for (size_t i = 0; i < SALT_LEN; i++)
+  {
+    salt[i] = (uint8_t)random(0, 256);
+  }
+  for (size_t i = 0; i < IV_LEN; i++)
+  {
+    iv[i] = (uint8_t)random(0, 256);
+  }
+
+  // Derive 32-byte key from (password + salt) using SHA-256
+  uint8_t derivedKey[KEY_LEN];
+  {
+    SHA256 sha256;
+    sha256.reset();
+    sha256.update((const uint8_t *)password, strlen(password));
+    sha256.update(salt, SALT_LEN);
+    sha256.finalize(derivedKey, KEY_LEN);
+  }
+
+  // PKCS#7 pad the plaintext (block size 16)
+  size_t paddedLen;
+  uint8_t *paddedPlaintext = pkcs7Pad(plainData, infoLen, 16, paddedLen);
+
+  // Encrypt using AES-256-CBC
+  CBC<AES256> cbcEncrypt;
+  cbcEncrypt.setKey(derivedKey, KEY_LEN);
+  cbcEncrypt.setIV(iv, IV_LEN);
+
+  uint8_t *ciphertext = (uint8_t *)malloc(paddedLen);
+  cbcEncrypt.encrypt(ciphertext, paddedPlaintext, paddedLen);
+
+  // Combine salt, IV, and ciphertext
+  size_t totalLen = SALT_LEN + IV_LEN + paddedLen;
+  uint8_t *combined = (uint8_t *)malloc(totalLen);
+  memcpy(combined, salt, SALT_LEN);
+  memcpy(combined + SALT_LEN, iv, IV_LEN);
+  memcpy(combined + SALT_LEN + IV_LEN, ciphertext, paddedLen);
+
+  String outHex = bytesToHex(combined, totalLen);
+
+  free(paddedPlaintext);
+  free(ciphertext);
+  free(combined);
+
+  return outHex;
+}
+
+String decryptData(const String &encryptedHex, const char *password)
+{
+  size_t totalLen = encryptedHex.length() / 2;
+  uint8_t *combined = (uint8_t *)malloc(totalLen);
+  hexToBytes(encryptedHex, combined, totalLen);
+
+  // Extract salt, IV and ciphertext
+  uint8_t salt[SALT_LEN], iv[IV_LEN];
+  memcpy(salt, combined, SALT_LEN);
+  memcpy(iv, combined + SALT_LEN, IV_LEN);
+  size_t cipherLen = totalLen - SALT_LEN - IV_LEN;
+  uint8_t *ciphertext = (uint8_t *)malloc(cipherLen);
+  memcpy(ciphertext, combined + SALT_LEN + IV_LEN, cipherLen);
+  free(combined);
+
+  // Derive key
+  uint8_t derivedKey[KEY_LEN];
+  {
+    SHA256 sha256;
+    sha256.reset();
+    sha256.update((const uint8_t *)password, strlen(password));
+    sha256.update(salt, SALT_LEN);
+    sha256.finalize(derivedKey, KEY_LEN);
+  }
+
+  // Decrypt using AES-256-CBC
+  CBC<AES256> cbcDecrypt;
+  cbcDecrypt.setKey(derivedKey, KEY_LEN);
+  cbcDecrypt.setIV(iv, IV_LEN);
+  uint8_t *decrypted = (uint8_t *)malloc(cipherLen);
+  cbcDecrypt.decrypt(decrypted, ciphertext, cipherLen);
+  free(ciphertext);
+
+  // Remove PKCS#7 padding
+  size_t unpaddedLen = pkcs7Unpad(decrypted, cipherLen, 16);
+
+  String out = "";
+  for (size_t i = 0; i < unpaddedLen; i++)
+  {
+    out += (char)decrypted[i];
+  }
+  free(decrypted);
+  return out;
+}
+
 void setup()
 {
   Serial.begin(115200);
   delay(1000);
 
+  const char *passcode = "mySecretPassword";
+
   // Storage of keys
   prefs.begin("storage", false);
-  String SolPriv = prefs.getString("SolPriv", "");
-  String EthPriv = prefs.getString("EthPriv", "");
-
-
-  prefs.end();
+  String encSolPriv = prefs.getString("SolPriv", "");
+  String encEthPriv = prefs.getString("EthPriv", "");
+  
+  String SolPriv = encSolPriv.length() > 0 ? decryptData(encSolPriv, passcode) : "";
+  String EthPriv = encEthPriv.length() > 0 ? decryptData(encEthPriv, passcode) : "";
 
   if (SolPriv.length() > 0 && EthPriv.length() > 0)
   {
@@ -182,6 +347,7 @@ void setup()
   }
   else
   {
+
     // Variables to store keys
     String solPrivBase58, solPubBase58, solCombinedBase58;
     String ethPrivateKey, ethPublicKey, ethAddress;
@@ -190,18 +356,27 @@ void setup()
     std::tie(ethPrivateKey, ethPublicKey, ethAddress) = generateEthereumKeys();
 
     // write the keys to NVS
-    prefs.putString("SolPriv", solPrivBase58);
-    prefs.putString("SolPub", solPubBase58);
-    prefs.putString("SolCombined", solCombinedBase58);
+    // Encrypt before storing
+    String encryptedSolPriv = encryptData(solPrivBase58, passcode);
+    String encryptedSolPub = encryptData(solPubBase58, passcode);
+    String encryptedSolCombined = encryptData(solCombinedBase58, passcode);
+    String encryptedEthPriv = encryptData(ethPrivateKey, passcode);
+    String encryptedEthPub = encryptData(ethPublicKey, passcode);
+    String encryptedEthAddr = encryptData(ethAddress, passcode);
 
-    prefs.putString("EthPriv", ethPrivateKey);
-    prefs.putString("EthPub", ethPublicKey);  
-    prefs.putString("EthAddr", ethAddress);
+    // Store encrypted values
+    prefs.putString("SolPriv", encryptedSolPriv);
+    prefs.putString("SolPub", encryptedSolPub);
+    prefs.putString("SolCombined", encryptedSolCombined);
+    prefs.putString("EthPriv", encryptedEthPriv); 
+    prefs.putString("EthPub", encryptedEthPub);
+    prefs.putString("EthAddr", encryptedEthAddr);
 
     Serial.println("Keys generated and stored in NVS");
   }
-
   prefs.end();
+
+
 }
 
 void loop()
