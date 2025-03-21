@@ -88,4 +88,8 @@ print("[INFO] Sending the signed transaction to Solana RPC...")
 response = rpc.send_raw_transaction(transaction.serialize())
 
 # Output transaction result
-print(f"[SUCCESS] Transaction sent! Signature: {response.to_json()['result']}")
+import json
+
+response_json = json.loads(response.to_json())
+print(f"[SUCCESS] Transaction sent! Signature: {response_json['result']}")
+print(f"[SUCCESS] Solscan: https://solscan.io/tx/{response_json['result']}?cluster=devnet")
