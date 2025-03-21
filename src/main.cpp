@@ -416,17 +416,14 @@ void setup()
   prefs.begin("storage", false);
   String encSolPriv = prefs.getString("SolPriv", "");
   String encEthPriv = prefs.getString("EthPriv", "");
-  String encSolPub = prefs.getString("SolPub", "");
-  String encEthPub = prefs.getString("EthPub", "");
+  String SolPub = prefs.getString("SolPub", "");
+  String EthPub = prefs.getString("EthPub", "");
   String encSolCombined = prefs.getString("SolCombined", "");
-  String encEthAddr = prefs.getString("EthAddr", "");
-  
+  String EthAddr = prefs.getString("EthAddr", "");
+
   String SolPriv = encSolPriv.length() > 0 ? decryptData(encSolPriv, passcode) : "";
   String EthPriv = encEthPriv.length() > 0 ? decryptData(encEthPriv, passcode) : "";
-  String SolPub = encSolPub.length() > 0 ? decryptData(encSolPub, passcode) : "";
-  String EthPub = encEthPub.length() > 0 ? decryptData(encEthPub, passcode) : "";
   String SolCombined = encSolCombined.length() > 0 ? decryptData(encSolCombined, passcode) : "";
-  String EthAddr = encEthAddr.length() > 0 ? decryptData(encEthAddr, passcode) : "";
 
   if (SolPriv.length() > 0 && EthPriv.length() > 0)
   {
@@ -451,19 +448,16 @@ void setup()
     // write the keys to NVS
     // Encrypt before storing
     String encryptedSolPriv = encryptData(solPrivBase58, passcode);
-    String encryptedSolPub = encryptData(solPubBase58, passcode);
     String encryptedSolCombined = encryptData(solCombinedBase58, passcode);
     String encryptedEthPriv = encryptData(ethPrivateKey, passcode);
-    String encryptedEthPub = encryptData(ethPublicKey, passcode);
-    String encryptedEthAddr = encryptData(ethAddress, passcode);
 
     // Store encrypted values
     prefs.putString("SolPriv", encryptedSolPriv);
-    prefs.putString("SolPub", encryptedSolPub);
+    prefs.putString("SolPub", solPubBase58);
     prefs.putString("SolCombined", encryptedSolCombined);
     prefs.putString("EthPriv", encryptedEthPriv); 
-    prefs.putString("EthPub", encryptedEthPub);
-    prefs.putString("EthAddr", encryptedEthAddr);
+    prefs.putString("EthPub", ethPublicKey);
+    prefs.putString("EthAddr", ethAddress);
 
     Serial.println("Keys generated and stored in NVS");
   }
