@@ -500,48 +500,52 @@ void loop()
   if (Serial.available())
   {
     // Take the serial input and sign it with the solana private key
-    String input = Serial.readStringUntil('\n');
-    input.trim();
+    char input = Serial.read();
 
-    // Convert input from hex to bytes
-    size_t inputLen = input.length() / 2;
-    uint8_t inputBytes[inputLen];
-    hexToBytes(input, inputBytes, inputLen);
+    if (input == '1') {
+      String tx = Serial.readStringUntil('\n');
+      tx.trim();
 
-    // Retrieve the Solana private key from NVS
-    prefs.begin("storage", false);
-    String encSolPriv = prefs.getString("SolPriv", "");
-    String encSolPub = prefs.getString("SolPub", "");
-    prefs.end();
+      // Convert input from hex to bytes
+      size_t inputLen = tx.length() / 2;
+      uint8_t inputBytes[inputLen];
+      hexToBytes(tx, inputBytes, inputLen);
 
-    if (encSolPriv.length() == 0)
-    {
-      Serial.println("No Solana private key found in NVS.");
-      return;
+      // Retrieve the Solana private key from NVS
+      prefs.begin("storage", false);
+      String encSolPriv = prefs.getString("SolPriv", "");
+      String encSolPub = prefs.getString("SolPub", "");
+      prefs.end();
+
+      if (encSolPriv.length() == 0)
+      {
+        Serial.println("No Solana private key found in NVS.");
+        return;
+      }
+
+      const char *passcode = "mySecretPassword";
+      String solPrivBase58 = decryptData(encSolPriv, passcode);
+
+      // Decode the Base58 private key back to bytes
+      uint8_t solPrivateKey[32];
+      base58Decode(solPrivBase58, solPrivateKey, 32);
+
+      // Generate the corresponding public key
+      String solPublicKey = decryptData(encSolPub, passcode);
+      uint8_t solPubKey[32];
+      base58Decode(solPublicKey, solPubKey, 32);
+
+      Serial.println("Public Key (Base58): " + solPublicKey);
+
+      // Sign the input data
+      uint8_t signature[64];
+      Ed25519::sign(signature, solPrivateKey, solPubKey, inputBytes, inputLen);
+
+      // Convert the signature to Base58
+      String signatureBase58 = base58Encode(signature, 64);
+
+      // Output the signature
+      Serial.println("Signature (Base58):" + signatureBase58);
     }
-
-    const char *passcode = "mySecretPassword";
-    String solPrivBase58 = decryptData(encSolPriv, passcode);
-
-    // Decode the Base58 private key back to bytes
-    uint8_t solPrivateKey[32];
-    base58Decode(solPrivBase58, solPrivateKey, 32);
-
-    // Generate the corresponding public key
-    String solPublicKey = decryptData(encSolPub, passcode);
-    uint8_t solPubKey[32];
-    base58Decode(solPublicKey, solPubKey, 32);
-
-    Serial.println("Public Key (Base58): " + solPublicKey);
-
-    // Sign the input data
-    uint8_t signature[64];
-    Ed25519::sign(signature, solPrivateKey, solPubKey, inputBytes, inputLen);
-
-    // Convert the signature to Base58
-    String signatureBase58 = base58Encode(signature, 64);
-
-    // Output the signature
-    Serial.println("Signature (Base58):" + signatureBase58);
   }
 }
