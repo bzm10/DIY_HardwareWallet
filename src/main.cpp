@@ -521,6 +521,14 @@ void loop()
 
       // Output the signature
       Serial.println("Signature (Base58):" + signatureBase58);
+    } else if (input == '2') {
+      // Retrieve the Solana private key from NVS
+      prefs.begin("storage", false);
+      String SolPub = prefs.getString("SolPub", "");
+      prefs.end();
+
+      // while (Serial.available() == 0) {}
+      Serial.println("Pubkey:" + SolPub);
     }
-  }
+  } 
 }

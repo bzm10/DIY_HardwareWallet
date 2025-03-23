@@ -5,6 +5,7 @@ from solana.rpc.api import Client
 from solana.transaction import Transaction, Signature
 from solders.system_program import TransferParams, transfer
 from solders.pubkey import Pubkey
+import qrcode
 
 # Initialize Serial Connection
 serial_port = "/dev/tty.usbserial-220"  # Update with your actual port
@@ -107,7 +108,30 @@ while True:
         print(f"[SUCCESS] Solscan: https://solscan.io/tx/{response_json['result']}?cluster=devnet")
 
     elif choice == "2":
-        # Get Account Info
-        pass
+        # Send it a "2" so it knows to expect an account info request
+        ser.write(b"2")
+
+        # Wait for the Arduino to send back the public key
+        while True:
+            s_pubkey = ser.readline().strip()
+            if s_pubkey.startswith(b"Pubkey:"):
+                s_pubkey = s_pubkey.replace(b"Pubkey:", b"").strip()
+                break
+
+        print(f"[INFO] Pubkey: {s_pubkey.decode()}")
+        # Press 1 to open a qr code for the pubkey and any other key to close
+        qr = input("(1) for QR code: ")
+        if qr == "1":
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,  # Highest error correction level
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(s_pubkey.decode())
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            img.show()
+            
     elif choice == "3":
         break
