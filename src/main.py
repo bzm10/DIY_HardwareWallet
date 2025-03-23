@@ -32,8 +32,29 @@ while True:
         print("[INFO] Connecting to Solana RPC...")
         rpc = Client("https://api.devnet.solana.com")
 
+        # Create a transaction and add the instruction
+        transaction = Transaction()
+
+        # Get the latest blockhash
+        print("[INFO] Fetching latest Solana blockhash...")
+        blockhash_resp = rpc.get_latest_blockhash()
+        blockhash = blockhash_resp.value.blockhash
+        transaction.recent_blockhash = blockhash
+
+        # Send it a "1" so it knows to expect a transaction
+        ser.write(b"1")
+
+        # Wait for the Arduino to send back the public key
+        while True:
+            s_pubkey = ser.readline().strip()
+            if s_pubkey.startswith(b"Pubkey:"):
+                s_pubkey = s_pubkey.replace(b"Pubkey:", b"").strip()
+                break
+
+        print(f"[INFO] Pubkey: {s_pubkey.decode()}")
+
         # Define sender and receiver public keys
-        sender_pub = Pubkey(base58.b58decode("7pKXWei9ukBDJsjARPVeebgr3W41EkchFpPtcwZDTV2X"))
+        sender_pub = Pubkey(base58.b58decode(s_pubkey.decode()))
         receiver_pub = Pubkey(base58.b58decode(receiver_address))
 
         # Create a transfer instruction
@@ -44,26 +65,16 @@ while True:
                 lamports=amount,
             )
         )
-
-        # Create a transaction and add the instruction
-        transaction = Transaction()
         transaction.add(transfer_instruction)
 
-        # Get the latest blockhash
-        print("[INFO] Fetching latest Solana blockhash...")
-        blockhash_resp = rpc.get_latest_blockhash()
-        blockhash = blockhash_resp.value.blockhash
-        transaction.recent_blockhash = blockhash
 
         # Serialize the transaction message
         serialized_message = transaction.serialize_message()
 
-        # Send it a "1" so it knows to expect a transaction
-        ser.write(b"1")
-
         # Send the serialized transaction message to the Arduino
         print("[INFO] Sending transaction to Arduino for signing...")
-        ser.write(serialized_message.hex().encode())
+        ser.write(serialized_message.hex().encode() + b"\n")
+        print(f"[INFO] Transaction: {serialized_message.hex().encode()}")
 
         # Wait for the Arduino to send back the signature
         while True:
@@ -74,6 +85,7 @@ while True:
 
         # Decode the Base58 signature
         signature_bytes = base58.b58decode(signature_base58)
+        print(f"[INFO] Signature: {signature_base58}")
 
         # Ensure signature is valid
         assert len(signature_bytes) == 64, "[ERROR] Invalid signature length"
