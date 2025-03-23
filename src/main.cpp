@@ -468,30 +468,6 @@ void setup()
 
 void loop()
 {
-  // // Command list codes
-  // String sendSol = "1";
-  // String sendEth = "2";
-  // String ViewSolPub = "3";
-  // String ViewEthPub = "4";
-
-  // // Read command from Serial
-  // String command = Serial.readStringUntil('\n');
-  // command.trim();
-
-  // // Check if the command is any of the above
-
-  // if (command == sendSol) {
-  //   // Send Solana keys
-  // } else if (command == sendEth) {
-  //   // Send Ethereum keys
-  // } else if (command == ViewSolPub) {
-  //   // View Solana public key
-  // } else if (command == ViewEthPub) {
-  //   // View Ethereum public key
-  // } else {
-  //   Serial.println("Invalid command");
-  // }
-
   // read serial input
   if (Serial.available())
   {
