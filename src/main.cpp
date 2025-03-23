@@ -462,6 +462,8 @@ void setup()
     Serial.println("Keys generated and stored in NVS");
   }
   prefs.end();
+  // Set serial timeout
+  Serial.setTimeout(5000);
 }
 
 void loop()
@@ -495,21 +497,27 @@ void loop()
   {
     // Take the serial input and sign it with the solana private key
     char input = Serial.read();
+    Serial.println("Input: " + String(input));
 
     if (input == '1') {
+      // Retrieve the Solana private key from NVS
+      prefs.begin("storage", false);
+      String encSolPriv = prefs.getString("SolPriv", "");
+      String SolPub = prefs.getString("SolPub", "");
+      prefs.end();
+
+      // while (Serial.available() == 0) {}
+      Serial.println("Pubkey:" + SolPub);
+
       String tx = Serial.readStringUntil('\n');
       tx.trim();
+
+      // Serial.println("Transaction: " + tx);
 
       // Convert input from hex to bytes
       size_t inputLen = tx.length() / 2;
       uint8_t inputBytes[inputLen];
       hexToBytes(tx, inputBytes, inputLen);
-
-      // Retrieve the Solana private key from NVS
-      prefs.begin("storage", false);
-      String encSolPriv = prefs.getString("SolPriv", "");
-      String encSolPub = prefs.getString("SolPub", "");
-      prefs.end();
 
       if (encSolPriv.length() == 0)
       {
@@ -525,11 +533,8 @@ void loop()
       base58Decode(solPrivBase58, solPrivateKey, 32);
 
       // Generate the corresponding public key
-      String solPublicKey = decryptData(encSolPub, passcode);
       uint8_t solPubKey[32];
-      base58Decode(solPublicKey, solPubKey, 32);
-
-      Serial.println("Public Key (Base58): " + solPublicKey);
+      base58Decode(SolPub, solPubKey, 32);
 
       // Sign the input data
       uint8_t signature[64];
