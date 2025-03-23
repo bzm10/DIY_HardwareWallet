@@ -529,6 +529,13 @@ void loop()
 
       // while (Serial.available() == 0) {}
       Serial.println("Pubkey:" + SolPub);
+    } else if (input == '4') {
+      // Print the Ethereum address
+      prefs.begin("storage", false);
+      String EthAddr = prefs.getString("EthAddr", "");
+      prefs.end();
+
+      Serial.println("Pubkey:" + EthAddr);
     }
   } 
 }

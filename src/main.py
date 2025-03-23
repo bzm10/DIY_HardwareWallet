@@ -20,8 +20,9 @@ print("[INFO] Connection established with Arduino.")
 while True:
     # Menu
     print("1. Transfer SOL")
-    print("2. Get Account Info")
+    print("2. Solana Public key")
     print("3. Exit")
+    print("4. Ethereum Public key")
     choice = input("Enter your choice: ")
 
     if choice == "1":
@@ -118,7 +119,7 @@ while True:
                 s_pubkey = s_pubkey.replace(b"Pubkey:", b"").strip()
                 break
 
-        print(f"[INFO] Pubkey: {s_pubkey.decode()}")
+        print(f"[INFO] Solana Public key: {s_pubkey.decode()}")
         # Press 1 to open a qr code for the pubkey and any other key to close
         qr = input("(1) for QR code: ")
         if qr == "1":
@@ -135,3 +136,27 @@ while True:
             
     elif choice == "3":
         break
+    elif choice == "4":
+        ser.write(b"4")
+        # Wait for the Arduino to send back the public key
+        while True:
+            s_pubkey = ser.readline().strip()
+            if s_pubkey.startswith(b"Pubkey:"):
+                s_pubkey = s_pubkey.replace(b"Pubkey:", b"").strip()
+                break
+
+        print(f"[INFO] Ethereum Public key: {s_pubkey.decode()}")
+        
+        qr = input("(1) for QR code: ")
+        if qr == "1":
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,  # Highest error correction level
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(s_pubkey.decode())
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            img.show()
+        
